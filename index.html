@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>The Cold-Start Playbook: Demand Forecasting Without Historical Data — Astha Jain</title>
+<meta name="description" content="Methodology for demand forecasting new products with zero sales history — using analog hierarchies to manage ~$50M in irreversible import commitments."/>
+<meta property="og:title" content="The Cold-Start Playbook: Demand Forecasting Without Historical Data"/>
+<meta property="og:description" content="How a principled analog hierarchy drove ~$500M in first-year Bettergoods private-label sales across 5 grocery categories with zero historical demand data."/>
+<meta property="og:type" content="article"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+/* ── Design tokens ─────────────────────────────────────────────────────── */
+:root{
+  --s0:#f9f9f7;--s1:#fcfcfb;--ink:#0b0b0b;--sec:#52514e;--muted:#898781;
+  --grid:#e1e0d9;--border:rgba(11,11,11,.10);
+  --blue:#6366f1;--orange:#eb6834;--aqua:#1baf7a;--yellow:#eda100;
+  --pink:#e87ba4;--violet:#4a3aa7;
+  --good:#0ca30c;--warn:#fab219;--crit:#d03b3b;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:13px;background:var(--s0);color:var(--ink);min-height:100vh;}
+
+/* ── Sticky nav ─────────────────────────────────────────────────────────── */
+.snav{position:sticky;top:0;z-index:200;background:rgba(255,255,255,.96);backdrop-filter:blur(12px);border-bottom:1px solid #e2e8f0;padding:0 20px;display:flex;align-items:center;gap:6px;height:48px;}
+.snav-brand{font-size:13px;font-weight:800;color:#0f172a;text-decoration:none;margin-right:16px;white-space:nowrap;}
+.snav-brand span{color:#6366f1;}
+.snav-items{display:flex;align-items:center;gap:2px;flex:1;}
+.snav-link{padding:5px 10px;border-radius:5px;font-size:12px;font-weight:500;color:#475569;text-decoration:none;white-space:nowrap;transition:background .12s,color .12s;}
+.snav-link:hover{background:rgba(99,102,241,.07);color:#0f172a;}
+.sndrop{position:relative;}
+.sndrop-toggle{display:flex;align-items:center;gap:4px;padding:5px 10px;border-radius:5px;font-size:12px;font-weight:500;color:#475569;cursor:pointer;user-select:none;white-space:nowrap;transition:background .12s,color .12s;}
+.sndrop-toggle:hover{background:rgba(99,102,241,.07);color:#0f172a;}
+.sndrop-toggle svg{width:9px;height:9px;transition:transform .18s;}
+.sndrop:hover .sndrop-toggle svg{transform:rotate(180deg);}
+.sndrop-menu{position:absolute;top:calc(100% + 6px);left:0;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:5px;min-width:256px;box-shadow:0 12px 40px rgba(0,0,0,.14);opacity:0;visibility:hidden;pointer-events:none;transform:translateY(-4px);transition:opacity .15s,transform .15s,visibility .15s;}
+.sndrop:hover .sndrop-menu{opacity:1;visibility:visible;pointer-events:auto;transform:translateY(0);}
+.sndrop-section{padding:6px 10px 3px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;}
+.sndrop-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;font-size:11px;font-weight:500;color:#475569;text-decoration:none;transition:background .1s,color .1s;}
+.sndrop-item:hover{background:rgba(99,102,241,.09);color:#0f172a;}
+.sndrop-item.active{background:rgba(99,102,241,.08);}
+.sndrop-icon{width:24px;height:24px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;}
+.sndrop-lbl{font-weight:600;color:#0f172a;font-size:11px;}
+.sndrop-sub{font-size:10px;color:#94a3b8;margin-top:1px;}
+.sndrop-div{height:1px;background:#e2e8f0;margin:4px 2px;}
+.snav-right{margin-left:auto;display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.snav-badge{padding:4px 12px;border-radius:5px;font-size:11px;font-weight:600;border:1px solid #e2e8f0;color:#475569;text-decoration:none;transition:border-color .12s,color .12s,background .12s;}
+.snav-badge:hover{background:#eef2ff;border-color:#6366f1;color:#6366f1;}
+
+/* ── Banners ─────────────────────────────────────────────────────────────── */
+.conf-banner{background:#f1f5f9;border-bottom:1px solid #cbd5e1;padding:10px 32px;font-size:11px;color:#475569;text-align:center;line-height:1.5;}
+
+/* ── Article layout ──────────────────────────────────────────────────────── */
+.article-container{max-width:760px;margin:0 auto;padding:44px 24px 88px;}
+
+/* ── Article header ──────────────────────────────────────────────────────── */
+.article-tag{display:inline-flex;padding:3px 10px;border-radius:999px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;background:rgba(99,102,241,.12);color:var(--blue);}
+.article-title{font-size:clamp(28px,5vw,40px);font-weight:800;line-height:1.1;letter-spacing:-.02em;color:var(--ink);margin:16px 0 20px;}
+.article-meta{font-size:12px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap;padding-bottom:24px;border-bottom:1px solid var(--grid);}
+.article-meta strong{color:var(--sec);font-weight:600;}
+
+/* ── TL;DR ───────────────────────────────────────────────────────────────── */
+.tldr-box{background:#f0f0fd;border-left:3px solid var(--blue);border-radius:0 8px 8px 0;padding:20px 24px;margin:32px 0;}
+.tldr-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--blue);margin-bottom:8px;}
+.tldr-text{font-size:14px;line-height:1.75;color:var(--sec);}
+
+/* ── Article body ────────────────────────────────────────────────────────── */
+.article-body{font-size:15px;line-height:1.82;color:var(--sec);}
+.article-body p{margin-bottom:16px;}
+.article-body strong{color:var(--ink);font-weight:700;}
+
+/* ── Section headings ────────────────────────────────────────────────────── */
+.section-heading{font-size:22px;font-weight:800;color:var(--ink);margin:52px 0 18px;letter-spacing:-.02em;}
+.section-num{color:var(--blue);}
+
+/* ── Pull quote ──────────────────────────────────────────────────────────── */
+.pull-quote{font-size:18px;font-weight:700;line-height:1.5;color:var(--ink);border-left:3px solid var(--blue);padding:18px 24px;margin:32px 0;background:#f8f9ff;border-radius:0 8px 8px 0;font-style:italic;}
+
+/* ── Callout box ─────────────────────────────────────────────────────────── */
+.callout-box{background:var(--s1);border:1px solid var(--border);border-left:3px solid var(--orange);border-radius:0 8px 8px 0;padding:16px 20px;margin:24px 0;}
+.callout-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--orange);margin-bottom:8px;}
+.callout-body{font-size:13px;color:var(--sec);line-height:1.68;}
+.callout-body strong{color:var(--ink);}
+.callout-body em{font-style:italic;}
+
+/* ── Framework steps ─────────────────────────────────────────────────────── */
+.framework-steps{display:flex;flex-direction:column;gap:14px;margin:24px 0 28px;}
+.step{display:flex;gap:14px;align-items:flex-start;}
+.step-num{width:28px;height:28px;border-radius:50%;background:var(--blue);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:3px;}
+.step-content{}
+.step-title{font-weight:700;color:var(--ink);font-size:14px;margin-bottom:4px;}
+.step-desc{font-size:13px;color:var(--sec);line-height:1.58;}
+
+/* ── Scenario cards ──────────────────────────────────────────────────────── */
+.scenario-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:24px 0 28px;}
+.scenario-card{background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:14px 16px;}
+.scenario-tag{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;padding:2px 7px;border-radius:999px;display:inline-block;}
+.scenario-tag.g{background:rgba(12,163,12,.1);color:var(--good);}
+.scenario-tag.y{background:rgba(250,178,25,.15);color:#92400e;}
+.scenario-tag.r{background:rgba(208,59,59,.1);color:var(--crit);}
+.scenario-title{font-size:13px;font-weight:700;color:var(--ink);margin-bottom:6px;line-height:1.3;}
+.scenario-body{font-size:12px;color:var(--sec);line-height:1.58;}
+
+/* ── Category profile grid ───────────────────────────────────────────────── */
+.cat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:20px 0 28px;}
+.cat-item{background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:13px 15px;}
+.cat-name{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;}
+.cat-name.dairy{color:var(--aqua);}
+.cat-name.frozen{color:var(--blue);}
+.cat-name.snacks{color:var(--orange);}
+.cat-name.pantry{color:var(--yellow);}
+.cat-desc{font-size:12px;color:var(--sec);line-height:1.55;}
+
+/* ── Embedded charts ─────────────────────────────────────────────────────── */
+.chart-embed{background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:16px;margin:28px 0;}
+.ce-title{font-size:12px;font-weight:700;color:var(--ink);margin-bottom:3px;}
+.ce-sub{font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5;}
+.chart-embed canvas{max-height:220px;}
+
+/* ── Timeline legend ─────────────────────────────────────────────────────── */
+.timeline-legend{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px;}
+.tl-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--sec);}
+.tl-swatch{width:12px;height:12px;border-radius:2px;flex-shrink:0;}
+
+/* ── Key takeaways ───────────────────────────────────────────────────────── */
+.key-takeaways{background:var(--s1);border:1px solid var(--border);border-radius:12px;padding:24px 28px;margin-top:52px;}
+.takeaways-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--blue);margin-bottom:18px;}
+.takeaway-item{display:flex;gap:12px;margin-bottom:13px;font-size:14px;color:var(--sec);line-height:1.6;}
+.takeaway-item:last-child{margin-bottom:0;}
+.takeaway-num{font-weight:800;color:var(--blue);min-width:22px;padding-top:1px;flex-shrink:0;}
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+.page-footer{margin-top:52px;padding:20px 0;border-top:1px solid var(--grid);font-size:11px;color:var(--muted);display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+.page-footer a{color:var(--blue);text-decoration:none;}
+.page-footer a:hover{text-decoration:underline;}
+.page-footer .rs{margin-left:auto;font-style:italic;}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media(max-width:640px){
+  .scenario-grid{grid-template-columns:1fr;}
+  .cat-grid{grid-template-columns:1fr;}
+  .article-meta{flex-direction:column;gap:5px;}
+  .article-container{padding:28px 16px 72px;}
+  .snav-items .snav-link{display:none;}
+}
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════════
+     NAV
+════════════════════════════════════════════════════════════════ -->
+<nav class="snav">
+  <a href="https://asthaj12.github.io" class="snav-brand">AJ<span> · Portfolio</span></a>
+  <div class="snav-items">
+    <div class="sndrop">
+      <div class="sndrop-toggle">
+        Work Samples
+        <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 3.5l3 3 3-3"/></svg>
+      </div>
+      <div class="sndrop-menu">
+        <div class="sndrop-section">Dashboards</div>
+        <a class="sndrop-item" href="https://asthaj12.github.io/forecast-governance/">
+          <div class="sndrop-icon" style="background:rgba(99,102,241,.12)">📊</div>
+          <div><div class="sndrop-lbl">Forecast Governance</div><div class="sndrop-sub">Anomaly triage · Bias correction</div></div>
+        </a>
+        <a class="sndrop-item" href="https://asthaj12.github.io/seasonal-planning/">
+          <div class="sndrop-icon" style="background:rgba(245,158,11,.12)">📅</div>
+          <div><div class="sndrop-lbl">Scenario Planning</div><div class="sndrop-sub">Demand scenarios · Commitment staging</div></div>
+        </a>
+        <a class="sndrop-item" href="https://asthaj12.github.io/pricing-demand-response/">
+          <div class="sndrop-icon" style="background:rgba(99,102,241,.12)">💹</div>
+          <div><div class="sndrop-lbl">Pricing &amp; Demand Response</div><div class="sndrop-sub">Elasticity · Lift analysis</div></div>
+        </a>
+        <a class="sndrop-item" href="https://asthaj12.github.io/npi-launch-planning/">
+          <div class="sndrop-icon" style="background:rgba(235,104,52,.12)">🚀</div>
+          <div><div class="sndrop-lbl">NPI Launch Planning</div><div class="sndrop-sub">Program management · Fill rate · PIPO</div></div>
+        </a>
+        <div class="sndrop-div"></div>
+        <div class="sndrop-section">Methodology</div>
+        <a class="sndrop-item active" href="https://asthaj12.github.io/cold-start-playbook/">
+          <div class="sndrop-icon" style="background:rgba(99,102,241,.18)">📄</div>
+          <div><div class="sndrop-lbl" style="color:var(--blue)">Cold-Start Playbook</div><div class="sndrop-sub">NPI analog hierarchy · Import planning</div></div>
+        </a>
+      </div>
+    </div>
+    <a class="snav-link" href="https://asthaj12.github.io#projects">Projects</a>
+    <a class="snav-link" href="https://asthaj12.github.io#skills">Skills</a>
+  </div>
+  <div class="snav-right">
+    <a class="snav-badge" href="https://linkedin.com/in/asthajain12" target="_blank">LinkedIn ↗</a>
+    <a class="snav-badge" href="https://github.com/asthaj12" target="_blank">GitHub ↗</a>
+  </div>
+</nav>
+
+<!-- ════════════════════════════════════════════════════════════════
+     CONFIDENTIALITY BANNER
+════════════════════════════════════════════════════════════════ -->
+<div class="conf-banner">
+  <strong>Independent portfolio case study.</strong> All data, company names, product identifiers, operating assumptions and results shown here are synthetic or materially transformed. This project does not reproduce any employer's data, systems, models, or confidential business processes.
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════
+     ARTICLE
+════════════════════════════════════════════════════════════════ -->
+<div class="article-container">
+
+  <!-- Header ──────────────────────────────────────────────────── -->
+  <span class="article-tag">Methodology · Demand Planning</span>
+  <h1 class="article-title">The Cold-Start Playbook: Demand Forecasting Without Historical Data</h1>
+  <div class="article-meta">
+    <span><strong>Author:</strong> Astha Jain</span>
+    <span><strong>Role context:</strong> Sr. Manager II, Demand Planning</span>
+    <span><strong>Reading time:</strong> ~8 min</span>
+    <span><strong>Tags:</strong> NPI &nbsp;·&nbsp; Import Planning &nbsp;·&nbsp; Analog Hierarchy &nbsp;·&nbsp; Private Label</span>
+  </div>
+
+  <!-- TL;DR ───────────────────────────────────────────────────── -->
+  <div class="tldr-box">
+    <div class="tldr-label">TL;DR</div>
+    <p class="tldr-text">When a new product launches with zero sales history, you have two choices: treat demand as unknown (and commit nothing), or build a principled analog framework that separates what you can know from what you can't. This playbook documents the methodology used to drive ~$500M in first-year private-label sales across 5 grocery categories — managing ~$50M in irreversible import commitments with no historical demand data to anchor on.</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       ARTICLE BODY
+  ════════════════════════════════════════════════════════════════ -->
+  <div class="article-body">
+
+    <!-- ── Section 1 ─────────────────────────────────────────── -->
+    <h2 class="section-heading"><span class="section-num">01&nbsp;&nbsp;</span>The Cold-Start Problem</h2>
+
+    <p>The cold-start problem is often described as a data problem: you don't have enough information to make a good forecast. But that framing misses the harder structural constraint. When you're launching a new private-label product at scale — five grocery categories, hundreds of stores, zero prior sales — the real problem isn't that your model lacks data. It's that you must make a commitment before data can exist.</p>
+
+    <p>Import lead times are the binding constraint. Ocean freight from Asian suppliers typically runs 14–16 weeks factory-to-DC, and purchase orders must be issued well before that to account for production lead time, quality assurance, and customs clearance. By the time you've placed an order, you've locked in a position that will materialize on a shelf 26 weeks later — whether or not the market turns out to want it. This isn't a forecasting problem you can solve with more data collection. No data will exist until the product is already in transit.</p>
+
+    <p>This timing structure creates two symmetric failure modes. <strong>Over-commitment</strong> means you bought too much: the product underperforms at launch, you're left managing markdowns and write-offs on a brand you've spent years building. <strong>Under-commitment</strong> means you bought too little: the product sells out in week two, customers can't find it and switch to a competitor — sometimes permanently. Both outcomes represent permanent losses. Ocean freight purchase orders cannot be renegotiated mid-voyage.</p>
+
+    <p>Traditional demand models handle uncertainty through probabilistic bounds — confidence intervals, safety stock buffers, ensemble forecasts. But those tools assume you have a prior distribution to draw from. For a new item with no history, in a new brand tier the retailer has never carried before, there is no distribution. The model has nothing to anchor on. This is the structural challenge that a cold-start analog framework addresses.</p>
+
+    <div class="pull-quote">"The cold-start problem isn't 'I don't have data.' It's 'I must make an irreversible decision before data exists, and the decision window closes before my model has learned anything.'"</div>
+
+    <div class="callout-box">
+      <div class="callout-label">The 26-Week Trap</div>
+      <p class="callout-body">Importing from Asia means your purchase order must exist before your first customer has ever seen the product. The factory needs 8–10 weeks for production, ocean transit adds 14–16 weeks, and DC receiving adds another 1–2 weeks. That's the math behind the 26-week commitment window. <strong>Any model that requires sales history is structurally useless here</strong> — you'll have your first actuals only after your last opportunity to act on them has already passed.</p>
+    </div>
+
+    <!-- Chart 1 -->
+    <div class="chart-embed">
+      <div class="ce-title">Chart 1 — The Cold-Start Error Pattern</div>
+      <div class="ce-sub">Forecast accuracy (%) by week post-launch: naive model vs. analog hierarchy. Naive models are overconfident at launch, crash as early actuals disappoint, then slowly recover. Analog hierarchy models begin calibrated and improve smoothly. Illustrative.</div>
+      <canvas id="chart1"></canvas>
+    </div>
+
+    <!-- ── Section 2 ─────────────────────────────────────────── -->
+    <h2 class="section-heading"><span class="section-num">02&nbsp;&nbsp;</span>The Analog Hierarchy</h2>
+
+    <p>If you can't anchor a forecast on the new item's own history, you anchor it on the history of items that behaved similarly. This is the core principle of the analog hierarchy: a structured, tiered framework for identifying the best available precedent for a new item's demand pattern and inheriting that pattern in a disciplined way.</p>
+
+    <p>The hierarchy has three tiers, applied in strict order of confidence. You always start at Tier 1 and descend only when no adequate analog exists at the higher tier. The tiers differ in specificity and reliability — and the framework is explicit about which tier is in use, because that determines how much magnitude adjustment is required.</p>
+
+    <p><strong>Tier 1 — Exact Comparable:</strong> A prior-year SKU in the same category, at the same price tier, in the same format, with similar shelf positioning. Confidence is high because the underlying consumer behavior is nearly identical. For a private-label grocery launch, this might be a prior private-label dairy item at the same price point, or a frozen entrée at the same format and serving count. When a Tier 1 analog exists, inherit both shape and use it as a strong prior for magnitude calibration.</p>
+
+    <p><strong>Tier 2 — Nearest-Neighbor Similarity Set:</strong> When no single exact analog exists, build a synthetic one from a cluster of items sharing three or more key attributes: same category, overlapping velocity range, same store format cluster. This set acts as a weighted composite — you're forecasting based on the average behavior of a curated group rather than a single comparable. Confidence is medium; shape is reliable, but magnitude requires more adjustment from distribution and shelf placement factors.</p>
+
+    <p><strong>Tier 3 — Category/Store-Cluster Prior:</strong> The floor-level fallback when no item-level comparable exists. This is the baseline ramp curve for the specific category-and-store-cluster combination, derived from the historical launch trajectories of all items ever introduced in that category. Confidence is low, but the shape is stable — categories reliably produce characteristic launch curves regardless of the specific item being launched.</p>
+
+    <div class="callout-box">
+      <div class="callout-label">The Critical Distinction</div>
+      <p class="callout-body">You are not forecasting that the new item will sell <em>exactly</em> like its analog. You're forecasting that it will follow a <strong>similar trajectory shape</strong> — the same ramp timing, peak timing, and decay rate. Magnitude is recalibrated separately as actuals arrive. The analog supplies the shape; shelf positioning, pricing, and distribution percentage determine the magnitude scale.</p>
+    </div>
+
+    <div class="framework-steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <div class="step-title">Identify Tier-1 Analogs</div>
+          <div class="step-desc">Search for exact comparables: same category, same price tier, same format, same store segment. If two or more qualify, weight by recency and unit volume. Document which analog was selected and why.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <div class="step-title">Build Tier-2 Similarity Set (if no Tier-1)</div>
+          <div class="step-desc">Construct a nearest-neighbor set from items sharing 3+ attributes. Minimum 5 items for a stable composite; weight each item by its attribute overlap score with the new item.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <div class="step-title">Apply Tier-3 Category Prior (if no Tier-2)</div>
+          <div class="step-desc">Apply the category × store-cluster baseline ramp curve. This is always available as the fallback of last resort. Flag in the forecast that only a Tier-3 analog is in use — magnitude confidence is low.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <div class="step-title">Inherit Demand Shape</div>
+          <div class="step-desc">Extract ramp velocity, peak timing, and decay slope from the chosen analog tier. Index to a demand curve normalized at 100 at peak. This is the shape template.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-content">
+          <div class="step-title">Scale Magnitude to Distribution + Pricing</div>
+          <div class="step-desc">Apply magnitude adjustments for shelf facings, distribution percentage (stores carrying the item), price-tier premium or discount vs. analog, and promotional calendar placement.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">6</div>
+        <div class="step-content">
+          <div class="step-title">Recalibrate Weekly as Actuals Arrive</div>
+          <div class="step-desc">Once launch-week data arrives, compute the ratio of actual-to-analog week-1 velocity. Apply this as a magnitude scalar going forward while preserving the inherited shape. Update weekly through week 8.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Chart 2 -->
+    <div class="chart-embed">
+      <div class="ce-title">Chart 2 — Shape Inheritance Across Tiers</div>
+      <div class="ce-sub">Three new items — different categories, very different unit volumes — all following a similar ramp-peak-decay shape inherited from their analog hierarchy. Shape is transferable across items; magnitude is item-specific. Demand index normalized per item at 100. Illustrative.</div>
+      <canvas id="chart2"></canvas>
+    </div>
+
+    <!-- ── Section 3 ─────────────────────────────────────────── -->
+    <h2 class="section-heading"><span class="section-num">03&nbsp;&nbsp;</span>Shape vs. Magnitude — The Key Separation</h2>
+
+    <p>Most demand forecasters try to predict a number: units per store per week. Cold-start forecasting requires a more fundamental decomposition. Before you can predict how much a product will sell, you need to separately predict <em>when</em> it will sell — and those two questions have very different answers, sourced from very different evidence.</p>
+
+    <p><strong>Shape</strong> is the temporal structure of demand: how fast does it ramp after launch, when does it hit its peak, and how steeply does it decay afterward? Shape comes from analogs. It is driven by category-level consumer behavior — how long it takes shoppers to discover a new product, try it, form a repeat-purchase habit, and reach word-of-mouth saturation. These dynamics are largely independent of the specific item. A new dairy product and a new frozen entrée will have very different shapes, but two new dairy products at similar price points will have nearly identical shapes.</p>
+
+    <p><strong>Magnitude</strong> is the peak volume: units per store per week at the demand apex. Magnitude comes from a different set of inputs entirely: shelf facings (more space drives awareness), distribution percentage (how many of your 4,000+ stores carry the item), price point relative to category average, and whether the item holds a promotional slot during launch. None of these factors are captured in the analog — they require store-specific positioning data that exists only for the new item itself.</p>
+
+    <p>The separation matters because shape is far more stable across items than magnitude. A forecast that gets shape right but magnitude wrong by 30% still tells you precisely when to have peak inventory positioned. A forecast that gets magnitude right but shape wrong creates stockouts at the peak — the single worst outcome for a new product launch, because the customers most likely to become repeat buyers are exactly the ones who show up when demand is highest.</p>
+
+    <div class="pull-quote">"You can be wrong about the volume by 30% and still position inventory correctly if you got the shape right. Getting the shape wrong creates OOS at peak — the worst possible outcome for a product you've just spent months launching."</div>
+
+    <p>Category behaviors differ materially on the shape dimension, which is why the Tier-3 category prior exists as a reliable fallback. The five grocery categories in this launch showed characteristic shapes that analogs reliably reproduced:</p>
+
+    <div class="cat-grid">
+      <div class="cat-item">
+        <div class="cat-name dairy">Dairy</div>
+        <div class="cat-desc">Fast ramp (2–3 weeks to peak), sustained plateau. Consumers discover dairy items quickly through routine shopping and form habits fast. Very low post-peak decay.</div>
+      </div>
+      <div class="cat-item">
+        <div class="cat-name frozen">Frozen</div>
+        <div class="cat-desc">Moderate ramp (4–6 weeks to peak), extended long tail. Shoppers are more deliberate with frozen discovery, but loyalty once formed is strong and persistent.</div>
+      </div>
+      <div class="cat-item">
+        <div class="cat-name snacks">Snacks / Beverages</div>
+        <div class="cat-desc">Explosive launch-week demand, rapid decay to a stable baseline. Novelty drives the initial spike; repeat purchase depends heavily on product experience — the decay is steep regardless.</div>
+      </div>
+      <div class="cat-item">
+        <div class="cat-name pantry">Pantry</div>
+        <div class="cat-desc">Very slow ramp (8–12 weeks to peak), durable long tail. Pantry requires the most behavioral change — shoppers resist switching established staples — but once adopted the item becomes routine.</div>
+      </div>
+    </div>
+
+    <!-- Chart 3 -->
+    <div class="chart-embed">
+      <div class="ce-title">Chart 3 — Category Shape Profiles</div>
+      <div class="ce-sub">Characteristic demand trajectories by grocery category, 16 weeks post-launch. Demand index normalized to each category's own peak (100). These shapes are reliably reproduced across items within a category and form the Tier-3 prior. Illustrative.</div>
+      <canvas id="chart3"></canvas>
+    </div>
+
+    <!-- ── Section 4 ─────────────────────────────────────────── -->
+    <h2 class="section-heading"><span class="section-num">04&nbsp;&nbsp;</span>Managing the Irreversible Commitment</h2>
+
+    <p>Understanding demand shape is necessary but not sufficient. The harder operational problem is matching what your model says against what you've already committed to buy — and doing that in a time-gated way, because the levers available to you narrow rapidly as the delivery date approaches.</p>
+
+    <p>This requires a conceptual separation that most demand teams don't make explicit: the difference between <strong>unconstrained demand truth</strong> and <strong>committed inventory truth</strong>.</p>
+
+    <p>The unconstrained demand truth is what your analog model forecasts demand would be if supply were unlimited — the pure demand signal derived from the hierarchy and magnitude scaling. The committed inventory truth is what you've already purchased and will receive, regardless of what demand turns out to be. These two numbers diverge from the moment you place your first purchase order, and managing the gap between them is the central operational challenge of import NPI planning.</p>
+
+    <p>Because ocean freight is essentially binary — the container either ships or it doesn't — the decision framework must be structured around specific time gates. Decisions that are reversible at T-20 become irreversible by T-10:</p>
+
+    <!-- Chart 4 -->
+    <div class="chart-embed">
+      <div class="ce-title">Chart 4 — Import Commitment Decision Gates</div>
+      <div class="ce-sub">26-week timeline from order placement to shelf availability, with reversibility coding by phase. Each gate marks a decision point where a different lever is available. After T-10, no quantity adjustment is possible. Illustrative.</div>
+      <div class="timeline-legend">
+        <div class="tl-item"><div class="tl-swatch" style="background:#1baf7a"></div>Reversible</div>
+        <div class="tl-item"><div class="tl-swatch" style="background:#eda100"></div>Adj. with penalty</div>
+        <div class="tl-item"><div class="tl-swatch" style="background:#eb6834"></div>Last cancellation gate</div>
+        <div class="tl-item"><div class="tl-swatch" style="background:#d03b3b"></div>Irreversible — in transit</div>
+        <div class="tl-item"><div class="tl-swatch" style="background:#9b2626"></div>Committed — at DC</div>
+      </div>
+      <canvas id="chart4"></canvas>
+    </div>
+
+    <p>At each gate, the demand model should be producing an updated signal. The question at every gate is not "what is the forecast?" but "does this forecast support the position we've already taken, and what action is still available before this window closes?"</p>
+
+    <p>Once the model is running against committed inventory, three scenarios govern the response:</p>
+
+    <div class="scenario-grid">
+      <div class="scenario-card">
+        <span class="scenario-tag r">Demand &gt; Inventory</span>
+        <div class="scenario-title">Undersupply Risk</div>
+        <div class="scenario-body">Prioritize store allocation to highest-velocity markets. Reorder is impossible within 26 weeks — prevent OOS at peak through tighter regional allocation and DC reserve management. Communicate risk to sales and merchant leadership early.</div>
+      </div>
+      <div class="scenario-card">
+        <span class="scenario-tag y">Demand = Inventory</span>
+        <div class="scenario-title">Standard Execution</div>
+        <div class="scenario-body">Execute standard allocation plan. Monitor weekly velocity vs. the inherited shape and flag deviations immediately. Even in matched scenarios, category mix differences create local imbalances that require active management.</div>
+      </div>
+      <div class="scenario-card">
+        <span class="scenario-tag g">Demand &lt; Inventory</span>
+        <div class="scenario-title">Excess Inventory Risk</div>
+        <div class="scenario-body">Alert finance and merchant teams immediately. Begin markdown planning before the product hits shelf. For perishable or seasonally constrained items, the cost of delayed markdown planning compounds quickly as inventory ages.</div>
+      </div>
+    </div>
+
+    <div class="callout-box">
+      <div class="callout-label">The Cancellation Window</div>
+      <p class="callout-body">For ocean-committed inventory, there is typically a narrow window — often 48–72 hours after factory departure — where cancellation is possible at a negotiated penalty (typically 15–25% of PO value). <strong>This window is the last lever.</strong> Before it closes, you need a pre-defined decision trigger: if the demand model shows a downside scenario above a threshold confidence level, the business case for paying the cancellation penalty is usually better than receiving the full quantity and executing a markdown campaign three months later. Have that trigger agreed upon before the ship leaves the dock.</p>
+    </div>
+
+    <!-- ── Section 5 ─────────────────────────────────────────── -->
+    <h2 class="section-heading"><span class="section-num">05&nbsp;&nbsp;</span>Recalibration as Actuals Arrive</h2>
+
+    <p>The analog hierarchy isn't a static forecast — it's a prior that gets updated with evidence. Once the product hits shelf, every week of sales data is a direct test of the model's predictions, and the framework should be learning from those results immediately.</p>
+
+    <p><strong>Week 1 actuals</strong> provide the most important single data point in the entire cold-start process: a magnitude anchor. The most informative comparison is the ratio of the new item's week-1 velocity to the analog's own week-1 velocity. If the new item is running at 0.85x the analog's week-1, apply that ratio as a scalar to the inherited demand shape going forward. This single observation is typically more predictive of final performance than any pre-launch indicator — shelf placement audits, consumer panel data, or early distribution reads.</p>
+
+    <p><strong>Week 4 actuals</strong> give you enough trajectory to project the peak with meaningful confidence. At this point you have the ramp velocity, early repeat-purchase signal, and a distribution read that accounts for which stores are actually receiving and selling the item. Compare actuals in weeks 1–4 against the analog's weeks 1–4: if the shape assumption is holding, continue with the inherited curve. If the product is ramping materially faster or slower, adjust the shape — don't just scale the magnitude.</p>
+
+    <p><strong>By week 8,</strong> the analog should be retired from the primary forecast entirely and replaced with item-specific modeling. The inherited shape has served its purpose — it carried the forecast through the commitment window and the launch period. Now the product has its own behavioral history. Anchoring on the analog too long creates forecast inertia that misses product-specific patterns as they diverge from the inherited template.</p>
+
+    <p>Three metrics warrant especially close monitoring during the recalibration window:</p>
+
+    <p><strong>1. Velocity vs. analog.</strong> Is the new item's unit velocity at or near the analog's velocity at the same post-launch week? Track this ratio weekly and watch for systematic drift in either direction.</p>
+
+    <p><strong>2. Distribution rate.</strong> What percentage of stores are actually receiving and selling the product? Underperforming velocity relative to the analog may reflect distribution gaps rather than demand shortfall. These require very different interventions — a demand shortfall calls for markdown planning; a distribution gap calls for replenishment escalation.</p>
+
+    <p><strong>3. Repeat rate.</strong> Are customers returning? Repeat purchase in weeks 3–6 is the single best leading indicator of long-run demand. High trial with low repeat signals a product-quality or price-value issue that no analog model or inventory adjustment can compensate for. If repeat rate is weak, flag the product for strategic review before committing to any reorder position.</p>
+
+    <p>Finally, a check that is frequently skipped: <strong>category cannibalization.</strong> If total category units are flat while the new item is growing, the new product is not generating incremental demand — it's redistributing existing demand from other items. In this case, the analog's magnitude overstates the true contribution, adjacent category items need defensive action, and the full category P&amp;L picture looks very different from the new item's standalone performance.</p>
+
+    <div class="pull-quote">"The goal isn't to be right at launch. The goal is to be right fast — to use the first data to recalibrate rapidly and manage the inventory you've already committed."</div>
+
+  </div><!-- /article-body -->
+
+  <!-- ── Key Takeaways ──────────────────────────────────────── -->
+  <div class="key-takeaways">
+    <div class="takeaways-label">Key Takeaways</div>
+    <div class="takeaway-item">
+      <span class="takeaway-num">1.</span>
+      <span>Cold-start demand planning is fundamentally an irreversibility problem, not a data problem. The commitment window closes before any sales data can exist — the model must function without it.</span>
+    </div>
+    <div class="takeaway-item">
+      <span class="takeaway-num">2.</span>
+      <span>The analog hierarchy — Tier 1 (exact comparable), Tier 2 (nearest-neighbor similarity set), Tier 3 (category/store-cluster prior) — provides a principled, auditable method for inheriting demand signal from related products.</span>
+    </div>
+    <div class="takeaway-item">
+      <span class="takeaway-num">3.</span>
+      <span>Shape and magnitude must be forecast separately. Shape (ramp velocity, peak timing, decay rate) comes from analogs; magnitude (units per store per week at peak) comes from distribution, pricing, and shelf placement inputs.</span>
+    </div>
+    <div class="takeaway-item">
+      <span class="takeaway-num">4.</span>
+      <span>Manage the gap between unconstrained demand truth and committed inventory truth through time-gated decision points. The levers available to you narrow quickly — identify your cancellation gate and have a trigger decision prepared before it closes.</span>
+    </div>
+    <div class="takeaway-item">
+      <span class="takeaway-num">5.</span>
+      <span>Week-1 actual velocity is the single most informative post-launch data point. Apply it immediately as a magnitude scalar; retire the analog model and transition to item-specific forecasting no later than week 8.</span>
+    </div>
+    <div class="takeaway-item">
+      <span class="takeaway-num">6.</span>
+      <span>Cannibalization monitoring is non-optional. If category total is flat while the new item grows, the analog magnitude is overstated and the adjacent item portfolio needs defensive planning.</span>
+    </div>
+  </div>
+
+  <!-- ── Footer ──────────────────────────────────────────────── -->
+  <div class="page-footer">
+    <span>&#169; Astha Jain &nbsp;·&nbsp; Portfolio Case Study</span>
+    <a href="https://asthaj12.github.io">&#8592; All Projects</a>
+    <a href="https://asthaj12.github.io/npi-launch-planning/">NPI Launch Dashboard &#8599;</a>
+    <span class="rs">Independent case study &nbsp;·&nbsp; All figures illustrative</span>
+  </div>
+
+</div><!-- /article-container -->
+
+<!-- ════════════════════════════════════════════════════════════════
+     CHARTS
+════════════════════════════════════════════════════════════════ -->
+<script>
+(function(){
+  Chart.defaults.font.family='system-ui,-apple-system,"Segoe UI",sans-serif';
+  Chart.defaults.font.size=11;
+  Chart.defaults.color='#898781';
+  Chart.defaults.plugins.legend.labels.boxWidth=10;
+  Chart.defaults.plugins.legend.labels.padding=14;
+  Chart.defaults.plugins.tooltip.padding=8;
+  Chart.defaults.plugins.tooltip.cornerRadius=4;
+  Chart.defaults.plugins.tooltip.boxPadding=3;
+  Chart.defaults.scale.grid.color='rgba(11,11,11,.07)';
+  Chart.defaults.scale.ticks.maxRotation=0;
+
+  const BLUE='#6366f1',ORANGE='#eb6834',AQUA='#1baf7a',YELLOW='#eda100',CRIT='#d03b3b';
+
+  /* ── Chart 1: Cold-Start Error Pattern ─────────────────────── */
+  new Chart(document.getElementById('chart1'),{
+    type:'line',
+    data:{
+      labels:[0,1,2,3,4,5,6,8,10,12,14,16,18,20],
+      datasets:[
+        {
+          label:'Naive Model',
+          data:[88,52,36,29,31,37,43,51,57,62,66,70,73,76],
+          borderColor:CRIT,
+          backgroundColor:'rgba(208,59,59,.08)',
+          borderWidth:2,tension:0.4,pointRadius:3,fill:true,
+        },
+        {
+          label:'Analog Hierarchy Model',
+          data:[58,60,63,65,67,69,72,76,79,82,84,86,87,88],
+          borderColor:AQUA,
+          backgroundColor:'rgba(27,175,122,.08)',
+          borderWidth:2,tension:0.4,pointRadius:3,fill:true,
+        }
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:true,
+      plugins:{
+        legend:{position:'top'},
+        tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y}%`}}
+      },
+      scales:{
+        x:{title:{display:true,text:'Weeks Post-Launch',font:{size:10}}},
+        y:{
+          title:{display:true,text:'Forecast Accuracy (%)',font:{size:10}},
+          min:0,max:100,
+          ticks:{callback:v=>v+'%'}
+        }
+      }
+    }
+  });
+
+  /* ── Chart 2: Shape Inheritance ─────────────────────────────── */
+  new Chart(document.getElementById('chart2'),{
+    type:'line',
+    data:{
+      labels:[0,1,2,3,4,5,6,7,8,9,10,12,14,16],
+      datasets:[
+        {
+          label:'Item A (High Volume)',
+          data:[0,28,68,95,100,94,83,76,72,70,69,67,65,64],
+          borderColor:BLUE,backgroundColor:'transparent',
+          borderWidth:2.5,tension:0.4,pointRadius:0,
+        },
+        {
+          label:'Item B (Mid Volume)',
+          data:[0,20,48,67,70,66,58,53,50,49,48,47,46,45],
+          borderColor:ORANGE,backgroundColor:'transparent',
+          borderWidth:2.5,tension:0.4,pointRadius:0,borderDash:[5,3],
+        },
+        {
+          label:'Item C (Low Volume)',
+          data:[0,10,24,34,35,33,29,27,25,24,24,23,23,22],
+          borderColor:AQUA,backgroundColor:'transparent',
+          borderWidth:2.5,tension:0.4,pointRadius:0,borderDash:[8,4],
+        }
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:true,
+      plugins:{
+        legend:{position:'top'},
+        tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y}`}}
+      },
+      scales:{
+        x:{title:{display:true,text:'Weeks Post-Launch',font:{size:10}}},
+        y:{title:{display:true,text:'Demand Index (normalized at 100 = peak)',font:{size:10}},min:0}
+      }
+    }
+  });
+
+  /* ── Chart 3: Category Shape Profiles ───────────────────────── */
+  new Chart(document.getElementById('chart3'),{
+    type:'line',
+    data:{
+      labels:[0,1,2,3,4,5,6,7,8,9,10,12,14,16],
+      datasets:[
+        {
+          label:'Dairy',
+          data:[0,62,90,100,98,97,96,95,94,93,93,92,91,90],
+          borderColor:AQUA,backgroundColor:'transparent',
+          borderWidth:2,tension:0.4,pointRadius:0,
+        },
+        {
+          label:'Frozen',
+          data:[0,18,40,60,76,88,96,100,98,96,94,91,88,86],
+          borderColor:BLUE,backgroundColor:'transparent',
+          borderWidth:2,tension:0.4,pointRadius:0,borderDash:[5,3],
+        },
+        {
+          label:'Snacks / Beverages',
+          data:[0,100,75,58,46,39,33,30,28,27,26,25,25,25],
+          borderColor:ORANGE,backgroundColor:'transparent',
+          borderWidth:2,tension:0.4,pointRadius:0,borderDash:[3,3],
+        },
+        {
+          label:'Pantry',
+          data:[0,7,16,26,36,46,55,64,72,80,86,93,98,100],
+          borderColor:YELLOW,backgroundColor:'transparent',
+          borderWidth:2,tension:0.4,pointRadius:0,borderDash:[8,3],
+        }
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:true,
+      plugins:{
+        legend:{position:'top'},
+        tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y}`}}
+      },
+      scales:{
+        x:{title:{display:true,text:'Weeks Post-Launch',font:{size:10}}},
+        y:{title:{display:true,text:'Demand Index (normalized at peak = 100)',font:{size:10}},min:0,max:110}
+      }
+    }
+  });
+
+  /* ── Chart 4: Commitment Decision Gates ─────────────────────── */
+  const gateMap={0:'T-26',6:'T-20',10:'T-16',16:'T-10',22:'T-4',26:'Launch'};
+  new Chart(document.getElementById('chart4'),{
+    type:'bar',
+    data:{
+      labels:[
+        'Initial PO Phase',
+        'Qty Adjustment Window',
+        'Final Cancellation Gate',
+        'Ocean Transit',
+        'DC Processing'
+      ],
+      datasets:[{
+        label:'Phase',
+        data:[[0,6],[6,10],[10,16],[16,22],[22,26]],
+        backgroundColor:[
+          'rgba(27,175,122,.75)',
+          'rgba(237,161,0,.78)',
+          'rgba(235,104,52,.82)',
+          'rgba(208,59,59,.82)',
+          'rgba(155,38,38,.82)',
+        ],
+        borderColor:['#1baf7a','#eda100','#eb6834','#d03b3b','#9b2626'],
+        borderWidth:1,
+        borderRadius:4,
+        borderSkipped:false,
+      }]
+    },
+    options:{
+      indexAxis:'y',
+      responsive:true,maintainAspectRatio:true,
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          callbacks:{
+            title:ctx=>ctx[0].label,
+            label:ctx=>{
+              const [s,e]=ctx.raw;
+              return ` Weeks ${s}–${e}  (${gateMap[s]||s} → ${gateMap[e]||e})`;
+            }
+          }
+        }
+      },
+      scales:{
+        x:{
+          min:0,max:26,
+          title:{display:true,text:'Weeks from Order Placement → Launch Day',font:{size:10}},
+          ticks:{
+            stepSize:1,
+            callback:v=>gateMap[v]!==undefined?gateMap[v]:''
+          }
+        },
+        y:{ticks:{font:{size:11}}}
+      }
+    }
+  });
+})();
+</script>
+
+</body>
+</html>
